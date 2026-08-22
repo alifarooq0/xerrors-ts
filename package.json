@@ -1,5 +1,5 @@
 {
-  "name": "xerrors",
+  "name": "ts-xerrors",
   "version": "0.1.0",
   "description": "Tagged domain errors for TypeScript, with neverthrow Result helpers.",
   "license": "MIT",

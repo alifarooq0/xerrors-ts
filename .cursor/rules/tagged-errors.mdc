@@ -20,7 +20,7 @@ import {
   remapError,
   withCause,
   type ErrorOf,
-} from "xerrors";
+} from "ts-xerrors";
 
 type UpstreamDetail = { status?: number; body?: string };
 

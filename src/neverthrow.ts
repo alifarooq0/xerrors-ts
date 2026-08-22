@@ -4,7 +4,7 @@
  * These are re-exports, not a rewrite. `ok`, `err`, `Result`, `ResultAsync`,
  * and the rest are the same values and types as importing neverthrow directly.
  *
- *   import { ok, err, type Result } from "xerrors";
+ *   import { ok, err, type Result } from "ts-xerrors";
  *   import { ok as neverthrowOk } from "neverthrow";
  *   ok === neverthrowOk // true
  *
