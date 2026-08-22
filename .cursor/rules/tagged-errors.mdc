@@ -1,0 +1,69 @@
+---
+description: Define domain errors with defineErrors + ErrorOf; return in Results, throw only at boundaries via toThrowable.
+globs: **/*.{ts,tsx}
+alwaysApply: true
+---
+
+# Tagged errors (`defineErrors`)
+
+Use **`defineErrors`** from `xerrors` for every domain error union.
+Do **not** hand-roll `{ type: string; message: string; cause?: unknown }` objects.
+
+## Pattern
+
+```ts
+import {
+  defineErrors,
+  err,
+  formatError,
+  payload,
+  remapError,
+  withCause,
+  type ErrorOf,
+} from "xerrors";
+
+type UpstreamDetail = { status?: number; body?: string };
+
+const AuthErr = defineErrors({
+  validation: payload(),
+  unauthorized: payload<UpstreamDetail>(),
+  config: payload(),
+  db: payload(),
+});
+
+export type AuthServiceError = ErrorOf<typeof AuthErr>;
+
+// Return in neverthrow Results (services, layers)
+return err(AuthErr.validation("bad input"));
+return err(AuthErr.unauthorized("expired", { status: 401, body, cause }));
+// wrap a thrown value without replacing the message
+DomainErr.network(withCause("Role types request failed", cause));
+console.error("upstream failed", formatError(err));
+
+// Map collaborator errors by kind name — preserve cause
+function mapCaptureError(cause: CaptureError): ProcessError {
+  return remapError(cause, {
+    not_found: ProcessErr.not_found,
+    validation: ProcessErr.validation,
+    _: ProcessErr.db,
+  });
+}
+```
+
+## Propagation
+
+| Layer | Style |
+|-------|--------|
+| Services / internals | `return err(DomainErr.variant(...))` — never throw |
+| Job-queue / framework boundary | `throw toThrowable(result.error)` in the handler only |
+| Logs | `console.error(prefix, formatError(err))` |
+| Failure persistence | `isTaggedError(err)` + `formatTaggedError(err)` |
+
+## Do not
+
+- Build error objects with `{ type: "…", message }` literals
+- Use `throw` for expected failures inside services
+- Rely on `instanceof` or a public `.type` field — narrow with `isErrorOf`
+- Drop upstream `cause` or `data` (`status`, `body`, …) when mapping collaborator errors
+  (read `e.data.status` / `e.data.body` after `isErrorOf`, not top-level fields)
+- Promote `cause.message` to the tagged `message` — use `withCause(label, cause)` instead

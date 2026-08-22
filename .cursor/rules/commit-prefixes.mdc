@@ -1,0 +1,52 @@
+---
+description: Use typed commit prefixes based on changed files
+alwaysApply: true
+---
+
+# Commit message prefixes
+
+When creating a git commit in this workspace, **always** prefix the subject line with exactly one of these tags (including the colon):
+
+`fix:` `feat:` `build:` `chore:` `ci:` `docs:` `style:` `refactor:` `perf:` `test:`
+
+Choose the prefix from the **primary intent** of the staged changes. Inspect `git diff` and `git status` before writing the message.
+
+## Prefix selection guide
+
+| Prefix | Use when changes are mainly… |
+|--------|------------------------------|
+| `fix:` | Bug fixes, error handling, regressions, correcting broken behavior |
+| `feat:` | New user-facing capability, API surface, or behavior |
+| `build:` | Build tooling, bundlers, lockfiles, dependency manifests (`package.json`, `pnpm-lock.yaml`, `Cargo.toml`, `Makefile`, webpack/vite config) |
+| `chore:` | Repo housekeeping with no product behavior change (`.gitignore`, editor config, scripts that aren’t CI/build/test/docs) |
+| `ci:` | CI/CD pipelines (`.github/workflows/**`, `.gitlab-ci.yml`, CircleCI, Jenkinsfile, `codecov`, deploy workflows) |
+| `docs:` | Documentation only (`README*`, `**/*.md`, `docs/**`, comments that document public API) |
+| `style:` | Formatting, lint autofixes, whitespace, naming/style-only edits with **no** logic change |
+| `refactor:` | Internal restructuring without changing external behavior |
+| `perf:` | Performance improvements (caching, algorithms, query optimization) |
+| `test:` | Tests only (`**/*.{test,spec}.*`, `**/__tests__/**`, `spec/**`, snapshots, fixtures for tests) |
+
+## Mixed changes
+
+- If multiple areas change, pick the **dominant** intent (what a reviewer cares about most).
+- Prefer `feat:` or `fix:` over `chore:` when product code changes carry the main story.
+- Do **not** combine multiple prefixes in one subject.
+
+## Message format
+
+```
+prefix: Short imperative summary (≤72 chars)
+
+Optional body explaining why, not just what.
+```
+
+## Examples
+
+```
+fix: handle null session in submission saver
+feat: add paid diagnostic brief export
+docs: update spec for black box engine
+test: cover image upload validation paths
+ci: run diagnostic suite on pull request
+refactor: extract submission payload builder
+```
