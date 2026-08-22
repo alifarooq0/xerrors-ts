@@ -16,6 +16,7 @@ import { inspect } from "node:util";
  *   EntityErr.validation("bad input");
  *   EntityErr.unauthorized("expired", { status: 401, cause });
  *   // → { message, cause, data: { status: 401 } }
+ *   // `data` is required on the type whenever the variant declared extra fields.
  *
  *   EntityErr.network(withCause("Entities request failed", cause));
  *
@@ -30,6 +31,9 @@ import { inspect } from "node:util";
  *
  *   if (isErrorOf(err, EntityErr.upstream)) { err.data.status }
  *   if (isErrorOf(err, EntityErr.upstream, EntityErr.network)) { ... }
+ *
+ *   hasErrorOf(err, EntityErr.upstream)           // this error or any cause
+ *   findErrorOf(err, EntityErr.upstream)?.data.status
  */
 
 /**
@@ -93,14 +97,12 @@ type VariantBranded<TType extends string> = { readonly "~variant": Invariant<TTy
 /** Extra fields, omitted at runtime when the variant declares none. */
 type TaggedError<TType extends string, TData, TSpec> = ([keyof TData] extends [never]
   ? TaggedErrorBase & { data?: never }
-  : Record<never, never> extends TData
-    ? TaggedErrorBase & { data?: TData }
-    : TaggedErrorBase & { data: TData }) &
+  : TaggedErrorBase & { data: TData }) &
   FactoryBranded<TSpec> &
   VariantBranded<TType>;
 
-/** Data arg is required only when the variant declares required fields. */
-type ErrorBuilder<TType extends string, TData, TSpec> = (Record<never, never> extends TData
+/** Data arg is required when the variant declares extra fields (even if optional). */
+type ErrorBuilder<TType extends string, TData, TSpec> = ([keyof TData] extends [never]
   ? (
       message: string | WithCause,
       data?: TData & { cause?: unknown },
@@ -128,6 +130,10 @@ export function defineErrors<TSpec extends { [K in keyof TSpec]: Payload<unknown
       const message = caused ? caused.message : messageOrCause;
       const { cause: dataCause, ...rest } = data ?? {};
       const cause = dataCause !== undefined ? dataCause : caused?.cause;
+      // Cause-only (`{ cause }`) does not mint an empty data bag. `{}` does,
+      // so a variant that declared extra fields always has `.data` at runtime.
+      const attachData =
+        data !== undefined && (Object.keys(rest).length > 0 || !("cause" in data));
       return {
         [TAGGED_ERROR]: true,
         [ERROR_VARIANT]: id,
@@ -135,7 +141,7 @@ export function defineErrors<TSpec extends { [K in keyof TSpec]: Payload<unknown
         message,
         stack: captureStack(),
         ...(cause !== undefined ? { cause } : {}),
-        ...(Object.keys(rest).length > 0 ? { data: rest } : {}),
+        ...(attachData ? { data: rest } : {}),
       };
     };
     factory[type] = Object.assign(build, { type, [ERROR_VARIANT]: id });
@@ -203,8 +209,81 @@ export function isErrorOf<E extends AnyTaggedError, const B extends readonly Err
   error: E,
   ...variants: { [I in keyof B]: SameFactory<E, B[I]> }
 ): error is Extract<E, ReturnType<B[number]>> {
+  return matchesAnyVariant(error, variants);
+}
+
+function matchesAnyVariant(error: object, variants: readonly ErrorVariant[]): boolean {
   const id = variantId(error);
   return variants.some((variant) => variantId(variant) === id);
+}
+
+/**
+ * Walk `error`, then `cause`, then `AggregateError.errors`. Yields each
+ * object once (cycle-safe). Used by `hasErrorOf` / `findErrorOf`.
+ */
+function* walkErrorTree(root: unknown): Generator<object> {
+  const seen = new WeakSet<object>();
+  const stack: unknown[] = [root];
+
+  while (stack.length > 0) {
+    const current = stack.pop();
+    if (current === null || current === undefined || typeof current !== "object") {
+      continue;
+    }
+    if (seen.has(current)) {
+      continue;
+    }
+    seen.add(current);
+    yield current;
+
+    const record = current as { cause?: unknown; errors?: unknown };
+    // LIFO: push siblings first so `cause` is visited next (self → cause chain
+    // → AggregateError.errors).
+    if (Array.isArray(record.errors)) {
+      for (let i = record.errors.length - 1; i >= 0; i--) {
+        stack.push(record.errors[i]);
+      }
+    }
+    if (record.cause !== undefined && record.cause !== null) {
+      stack.push(record.cause);
+    }
+  }
+}
+
+/**
+ * True if `error` or any value in its cause chain matches one of the
+ * builders. Unlike `isErrorOf`, this is not a type guard on `error` — a
+ * match may be nested under `cause` — and builders from other factories
+ * are allowed so a remapped error can still be searched for the original.
+ *
+ *   hasErrorOf(failure, EntityErr.unauthorized)
+ *   hasErrorOf(processError, CaptureErr.not_found)
+ */
+export function hasErrorOf<const B extends readonly ErrorVariant[]>(
+  error: unknown,
+  ...variants: B
+): boolean {
+  return findErrorOf(error, ...variants) !== undefined;
+}
+
+/**
+ * First tagged error in `error` and its cause chain that matches one of
+ * the builders, or `undefined`. Visit order: the value itself, then
+ * `cause`, then `AggregateError.errors`. Matching is by builder identity.
+ *
+ *   const unauthorized = findErrorOf(failure, EntityErr.unauthorized);
+ *   unauthorized?.data.status
+ */
+export function findErrorOf<const B extends readonly ErrorVariant[]>(
+  error: unknown,
+  ...variants: B
+): ReturnType<B[number]> | undefined {
+  for (const current of walkErrorTree(error)) {
+    if (isTaggedError(current) && matchesAnyVariant(current, variants)) {
+      return current as ReturnType<B[number]>;
+    }
+  }
+  return undefined;
 }
 
 /**

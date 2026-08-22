@@ -78,7 +78,7 @@ Each builder doubles as a variant tag. Matching is by the factory that minted th
 import { isErrorOf } from "xerrors";
 
 if (isErrorOf(failure, EntityErr.unauthorized)) {
-  failure.data.status; // narrowed to the unauthorized variant
+  failure.data.status; // `data` is required; `status` is optional on this payload
 }
 
 if (isErrorOf(failure, EntityErr.unauthorized, EntityErr.network)) {
@@ -87,6 +87,21 @@ if (isErrorOf(failure, EntityErr.unauthorized, EntityErr.network)) {
 ```
 
 `isTaggedError` is the unbranded guard (useful after a catch). Unbranded values accept any builder; runtime identity still decides.
+
+`isErrorOf` only checks the error you pass. After `withCause` or `remapError`, the original lives on `cause`. `hasErrorOf` / `findErrorOf` walk that chain (including native `Error.cause` and `AggregateError.errors`). Matching is still by builder identity, so a remapped error can be searched for the collaborator variant.
+
+```ts
+import { findErrorOf, hasErrorOf } from "xerrors";
+
+hasErrorOf(failure, EntityErr.unauthorized);
+
+const unauthorized = findErrorOf(failure, EntityErr.unauthorized);
+if (unauthorized) {
+  unauthorized.data.status; // `data` is required after a match
+}
+
+hasErrorOf(processError, CaptureErr.not_found);
+```
 
 ## Remap across domains
 

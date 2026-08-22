@@ -23,8 +23,10 @@ export {
 
 export {
   defineErrors,
+  findErrorOf,
   formatError,
   formatTaggedError,
+  hasErrorOf,
   isErrorOf,
   isTaggedError,
   payload,
