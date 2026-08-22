@@ -9,7 +9,7 @@ importers:
   .:
     dependencies:
       neverthrow:
-        specifier: 8.2.0
+        specifier: ^8.2.0
         version: 8.2.0
     devDependencies:
       '@types/node':
@@ -184,7 +184,6 @@ packages:
     resolution: {integrity: sha512-6RHPJR1g/uvdYU8uXBnfq3nlqyZCP82Fr6NHgfGoaIeSh0YEqnX/x6uA9MmJJbnSH7swqX4F+CkGdUF+6doiQA==}
     cpu: [x64]
     os: [linux]
-    libc: [glibc]
 
   '@types/node@22.20.1':
     resolution: {integrity: sha512-EANqOCF9QFyra+4pfxUcX9STKJpCLjMbObVzljIJomAWSnuSIEAvyzEU53GaajbXJEgdh0iEcPL+DGvpUd4k1Q==}

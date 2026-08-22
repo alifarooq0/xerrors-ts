@@ -1,26 +1,45 @@
 {
   "name": "xerrors",
-  "version": "0.0.1",
-  "private": true,
+  "version": "0.1.0",
+  "description": "Tagged domain errors for TypeScript, with neverthrow Result helpers.",
+  "license": "MIT",
+  "author": "Ali Farooq",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/alifarooq0/xerrors-ts.git"
+  },
+  "homepage": "https://github.com/alifarooq0/xerrors-ts#readme",
+  "bugs": {
+    "url": "https://github.com/alifarooq0/xerrors-ts/issues"
+  },
+  "keywords": [
+    "typescript",
+    "errors",
+    "neverthrow",
+    "result",
+    "tagged-errors"
+  ],
   "type": "module",
+  "sideEffects": false,
   "main": "./dist/index.js",
   "types": "./dist/index.d.ts",
   "exports": {
     ".": {
       "types": "./dist/index.d.ts",
       "import": "./dist/index.js",
-      "require": "./dist/index.js",
       "default": "./dist/index.js"
     }
   },
+  "files": ["dist"],
   "scripts": {
     "build": "tsc -p tsconfig.build.json",
     "dev": "tsc -p tsconfig.build.json --watch",
     "test": "tsx --test src/*.test.ts",
-    "typecheck": "tsc --noEmit"
+    "typecheck": "tsc --noEmit",
+    "prepublishOnly": "pnpm test && pnpm build"
   },
   "dependencies": {
-    "neverthrow": "8.2.0"
+    "neverthrow": "^8.2.0"
   },
   "devDependencies": {
     "@types/node": "22.20.1",
@@ -30,6 +49,9 @@
   "packageManager": "pnpm@10.16.1",
   "engines": {
     "node": ">=20.19.0"
+  },
+  "publishConfig": {
+    "access": "public"
   },
   "pnpm": {
     "onlyBuiltDependencies": ["esbuild"]

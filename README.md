@@ -158,3 +158,7 @@ formatTaggedError(failure);
 ```
 
 `formatError` attaches a custom `util.inspect` so `console.error` (inspect depth 2) does not collapse nested causes.
+
+## License
+
+[MIT](./LICENSE)
