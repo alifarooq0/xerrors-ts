@@ -1,4 +1,4 @@
-# ts-xerrors
+# ts-xerrorof
 
 Tagged domain errors for TypeScript. Define a factory per domain, get a typed union for free, and propagate the same shape whether you return it or throw it.
 
@@ -7,7 +7,7 @@ Requires [Node.js](https://nodejs.org/) (the log formatter uses `util.inspect`).
 ## Install
 
 ```bash
-pnpm add ts-xerrors
+pnpm add ts-xerrorof
 ```
 
 ## Result (`ok` / `err`)
@@ -15,7 +15,7 @@ pnpm add ts-xerrors
 `ok`, `err`, `Result`, `ResultAsync`, and the other Result helpers are **re-exported from [neverthrow](https://github.com/supermacro/neverthrow)** — not a rewrite. They are the same functions and types:
 
 ```ts
-import { ok, err, type Result } from "ts-xerrors";
+import { ok, err, type Result } from "ts-xerrorof";
 import { ok as neverthrowOk } from "neverthrow";
 
 ok === neverthrowOk; // true
@@ -26,7 +26,7 @@ Re-exported primitives: `ok`, `err`, `Ok`, `Err`, `Result`, `okAsync`, `errAsync
 Use them with tagged errors:
 
 ```ts
-import { defineErrors, err, ok, payload, type ErrorOf, type Result } from "ts-xerrors";
+import { defineErrors, err, ok, payload, type ErrorOf, type Result } from "ts-xerrorof";
 
 function save(entity: Entity | null): Result<Entity, EntityError> {
   if (entity === null) {
@@ -41,7 +41,7 @@ See the [neverthrow docs](https://github.com/supermacro/neverthrow) for `Result`
 ## Define a domain
 
 ```ts
-import { defineErrors, payload, type ErrorOf } from "ts-xerrors";
+import { defineErrors, payload, type ErrorOf } from "ts-xerrorof";
 
 const EntityErr = defineErrors({
   validation: payload(), // { message }
@@ -63,7 +63,7 @@ EntityErr.unauthorized("expired", { status: 401, cause });
 Keep the caller message and attach the original failure as `cause`:
 
 ```ts
-import { withCause } from "ts-xerrors";
+import { withCause } from "ts-xerrorof";
 
 EntityErr.network(withCause("Entities request failed", cause));
 ```
@@ -75,7 +75,7 @@ Do not promote `cause.message` to the tagged `message`.
 Each builder doubles as a variant tag. Matching is by the factory that minted the error, not the `.type` string, so `EntityErr.network` and `ReferenceErr.network` do not collide.
 
 ```ts
-import { isErrorOf } from "ts-xerrors";
+import { isErrorOf } from "ts-xerrorof";
 
 if (isErrorOf(failure, EntityErr.unauthorized)) {
   failure.data.status; // `data` is required; `status` is optional on this payload
@@ -91,7 +91,7 @@ if (isErrorOf(failure, EntityErr.unauthorized, EntityErr.network)) {
 `isErrorOf` only checks the error you pass. After `withCause` or `remapError`, the original lives on `cause`. `hasErrorOf` / `findErrorOf` walk that chain (including native `Error.cause` and `AggregateError.errors`). Matching is still by builder identity, so a remapped error can be searched for the collaborator variant.
 
 ```ts
-import { findErrorOf, hasErrorOf } from "ts-xerrors";
+import { findErrorOf, hasErrorOf } from "ts-xerrorof";
 
 hasErrorOf(failure, EntityErr.unauthorized);
 
@@ -108,7 +108,7 @@ hasErrorOf(processError, CaptureErr.not_found);
 `isErrorOf` will not treat `CaptureErr.not_found` as `ProcessErr.not_found`. When a layer should translate *kind by name*, use `remapError`. `_` is the fallback. Message is kept; the original is `cause`.
 
 ```ts
-import { remapError } from "ts-xerrors";
+import { remapError } from "ts-xerrorof";
 
 return err(
   remapError(captureError, {
@@ -129,7 +129,7 @@ One tagged-error shape, two ways to propagate:
 - **Throw** at a job-queue / framework boundary that catches `Error`s:
 
 ```ts
-import { isTaggedError, toThrowable } from "ts-xerrors";
+import { isTaggedError, toThrowable } from "ts-xerrorof";
 
 throw toThrowable(failure);
 
@@ -147,7 +147,7 @@ try {
 ## Format for logs
 
 ```ts
-import { formatError, formatTaggedError } from "ts-xerrors";
+import { formatError, formatTaggedError } from "ts-xerrorof";
 
 console.error("upstream failed", formatError(failure));
 // compact object: type, message, cause, data — no stack.
