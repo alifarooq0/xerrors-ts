@@ -1,4 +1,5 @@
 import assert from "node:assert/strict";
+import net from "node:net";
 import test from "node:test";
 import { inspect } from "node:util";
 import {
@@ -267,6 +268,31 @@ test("withCause keeps the caller message and attaches cause", () => {
   assert.equal(err.cause, cause);
 });
 
+test("formatError matches a real fetch ECONNREFUSED", async () => {
+  const port = await closedLocalPort();
+  let fetched: unknown;
+  try {
+    await fetch(`http://127.0.0.1:${port}`);
+    assert.fail("expected fetch to refuse the connection");
+  } catch (cause) {
+    fetched = cause;
+  }
+
+  assert.ok(fetched instanceof TypeError);
+  assert.equal(fetched.message, "fetch failed");
+
+  const err = EntityErr.network(withCause("Entities request failed", fetched));
+  assert.deepEqual(formatError(err), {
+    type: "network",
+    message: "Entities request failed",
+    cause: {
+      name: "TypeError",
+      message: "fetch failed",
+      cause: formatNativeConnectCause(fetched.cause, port),
+    },
+  });
+});
+
 test("formatError includes TypeError name and nested Node system details", () => {
   const inner = Object.assign(new Error("connect ECONNREFUSED 127.0.0.1:443"), {
     code: "ECONNREFUSED",
@@ -333,3 +359,53 @@ test("formatError expands AggregateError nested errors", () => {
   assert.match(text, /syscall: 'connect'/);
   assert.match(text, /address: '127\.0\.0\.1'/);
 });
+
+function closedLocalPort(): Promise<number> {
+  return new Promise((resolve, reject) => {
+    const server = net.createServer();
+    server.listen(0, "127.0.0.1", () => {
+      const address = server.address();
+      if (address === null || typeof address === "string") {
+        server.close();
+        reject(new Error("expected a TCP address"));
+        return;
+      }
+      const { port } = address;
+      server.close((closeErr) => {
+        if (closeErr) reject(closeErr);
+        else resolve(port);
+      });
+    });
+    server.once("error", reject);
+  });
+}
+
+/** Shape `formatError` should emit for fetch's nested connect failure. */
+function formatNativeConnectCause(cause: unknown, port: number): Record<string, unknown> {
+  if (cause instanceof AggregateError) {
+    const first = cause.errors[0] as NodeJS.ErrnoException | undefined;
+    assert.equal(first?.code, "ECONNREFUSED");
+    return {
+      name: "AggregateError",
+      message: cause.message,
+      ...("code" in cause && cause.code !== undefined ? { code: cause.code } : {}),
+      errors: [connectRefusedFields(first, port)],
+    };
+  }
+
+  const refused = cause as NodeJS.ErrnoException;
+  assert.equal(refused.code, "ECONNREFUSED");
+  return connectRefusedFields(refused, port);
+}
+
+function connectRefusedFields(refused: NodeJS.ErrnoException, port: number): Record<string, unknown> {
+  return {
+    name: refused.name,
+    message: refused.message,
+    code: "ECONNREFUSED",
+    errno: refused.errno,
+    syscall: "connect",
+    address: "127.0.0.1",
+    port,
+  };
+}
