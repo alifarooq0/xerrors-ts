@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 import { remapError } from "./remap.js";
-import { defineErrors, isErrorOf, payload, type AnyTaggedError } from "./tagged.js";
+import { defineErrors, formatError, isErrorOf, payload, type AnyTaggedError } from "./tagged.js";
 
 const CaptureErr = defineErrors({
   not_found: payload(),
@@ -50,7 +50,7 @@ test("remapError attaches the original as cause, not data", () => {
   const source = CaptureErr.validation("bad input");
   const mapped = remapCapture(source);
   assert.equal(mapped.cause, source);
-  assert.equal("data" in mapped, false);
+  assert.equal("data" in formatError(mapped), false);
 });
 
 test("remapError accepts a hand-rolled { type, message }", () => {

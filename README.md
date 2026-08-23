@@ -52,6 +52,7 @@ const EntityErr = defineErrors({
 type EntityError = ErrorOf<typeof EntityErr>;
 
 EntityErr.validation("bad input");
+EntityErr.unauthorized("expired"); // data: {}
 EntityErr.unauthorized("expired", { status: 401, cause });
 // → { message, cause, data: { status: 401 } }
 ```

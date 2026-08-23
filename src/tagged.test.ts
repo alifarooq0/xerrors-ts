@@ -37,7 +37,7 @@ test("builder stamps message and captures stack", () => {
   const err = EntityErr.validation("bad input");
   assert.equal(err.message, "bad input");
   assert.ok(err.stack);
-  assert.equal("data" in err, false);
+  assert.equal("data" in formatError(err), false);
   assert.equal(isErrorOf(err, EntityErr.validation), true);
   assert.equal(formatError(err).type, "validation");
 });
@@ -58,34 +58,50 @@ test("cause is a sibling of data, not nested in it", () => {
   assert.equal("cause" in err.data, false);
 });
 
-test("cause-only does not attach an empty data bag", () => {
+test("cause-only does not put cause in data", () => {
   const root = new Error("fetch failed");
   const err = EntityErr.validation("bad input", { cause: root });
   assert.equal(err.cause, root);
-  assert.equal("data" in err, false);
+  assert.equal("data" in formatError(err), false);
 });
 
 test("ErrorOf is narrowed with isErrorOf, not .type", () => {
   const errors: EntityError[] = [
     EntityErr.validation("x"),
-    EntityErr.unauthorized("y", { status: 403 }),
+    EntityErr.unauthorized("y"),
   ];
   for (const e of errors) {
     if (isErrorOf(e, EntityErr.unauthorized)) {
-      assert.equal(e.data.status, 403);
+      assert.equal(e.data.status, undefined);
     } else {
       assert.equal(isErrorOf(e, EntityErr.validation), true);
-      assert.equal("data" in e, false);
+      assert.equal("data" in formatError(e), false);
     }
   }
 });
 
-test("declared payload requires a data argument and a data field", () => {
-  // @ts-expect-error extra fields require a data argument
-  EntityErr.unauthorized("expired");
+test("optional payload fields omit the data argument and still set data", () => {
+  const empty = EntityErr.unauthorized("expired");
+  assert.deepEqual(empty.data, {});
+  assert.equal("data" in empty, true);
+
+  const withCauseOnly = EntityErr.unauthorized("expired", { cause: new Error("root") });
+  assert.deepEqual(withCauseOnly.data, {});
+  assert.equal(withCauseOnly.cause instanceof Error, true);
+
   type Unauthorized = ReturnType<typeof EntityErr.unauthorized>;
   false satisfies Extends<undefined, Unauthorized["data"]>;
   const err = EntityErr.unauthorized("expired", { status: 401 });
+  assert.equal(err.data.status, 401);
+});
+
+test("required payload fields still require a data argument", () => {
+  const StrictErr = defineErrors({
+    unauthorized: payload<{ status: number }>(),
+  });
+  // @ts-expect-error status is required
+  StrictErr.unauthorized("expired");
+  const err = StrictErr.unauthorized("expired", { status: 401 });
   assert.equal(err.data.status, 401);
 });
 

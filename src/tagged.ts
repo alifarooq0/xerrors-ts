@@ -8,15 +8,16 @@ import { inspect } from "node:util";
  * name is not a public field on the error — `formatError` still prints it.
  *
  *   const EntityErr = defineErrors({
- *     validation: payload(),                          // { message }
- *     unauthorized: payload<{ status?: number }>(),   // extra fields live on data
+ *     validation: payload(),                                // { message }
+ *     unauthorized: payload<{ status?: number }>(),         // extra fields live on data
  *   });
- *   type EntityError = ErrorOf<typeof EntityErr>;     // the union, for free
+ *   type EntityError = ErrorOf<typeof EntityErr>;           // the union, for free
  *
  *   EntityErr.validation("bad input");
+ *   EntityErr.unauthorized("expired");                      // data: {}
  *   EntityErr.unauthorized("expired", { status: 401, cause });
  *   // → { message, cause, data: { status: 401 } }
- *   // `data` is required on the type whenever the variant declared extra fields.
+ *   // `data` is always set when the variant declared extra fields.
  *
  *   EntityErr.network(withCause("Entities request failed", cause));
  *
@@ -57,6 +58,11 @@ function captureStack(): string | undefined {
 /** Phantom carrier that pins the extra data type for one variant. */
 export type Payload<TData> = { readonly __data?: TData };
 
+/**
+ * `payload()` — no extra fields (no `data` on the type).
+ * `payload<T>()` — extra fields live on `data`, which is always set (possibly `{}`).
+ * The builder argument is required only when `T` has required keys.
+ */
 export function payload<TData = Record<never, never>>(): Payload<TData> {
   return {};
 }
@@ -94,15 +100,15 @@ type FactoryBranded<TSpec> = { readonly "~factory": Invariant<TSpec> };
 /** Keeps same-shape variants (e.g. `validation` vs `network`) distinct without a public `.type`. */
 type VariantBranded<TType extends string> = { readonly "~variant": Invariant<TType> };
 
-/** Extra fields, omitted at runtime when the variant declares none. */
+/** Extra fields live on `data`. `payload()` variants omit `data` from the type. */
 type TaggedError<TType extends string, TData, TSpec> = ([keyof TData] extends [never]
   ? TaggedErrorBase & { data?: never }
   : TaggedErrorBase & { data: TData }) &
   FactoryBranded<TSpec> &
   VariantBranded<TType>;
 
-/** Data arg is required when the variant declares extra fields (even if optional). */
-type ErrorBuilder<TType extends string, TData, TSpec> = ([keyof TData] extends [never]
+/** Data arg is required only when the variant declares required fields. */
+type ErrorBuilder<TType extends string, TData, TSpec> = (Record<never, never> extends TData
   ? (
       message: string | WithCause,
       data?: TData & { cause?: unknown },
@@ -130,10 +136,6 @@ export function defineErrors<TSpec extends { [K in keyof TSpec]: Payload<unknown
       const message = caused ? caused.message : messageOrCause;
       const { cause: dataCause, ...rest } = data ?? {};
       const cause = dataCause !== undefined ? dataCause : caused?.cause;
-      // Cause-only (`{ cause }`) does not mint an empty data bag. `{}` does,
-      // so a variant that declared extra fields always has `.data` at runtime.
-      const attachData =
-        data !== undefined && (Object.keys(rest).length > 0 || !("cause" in data));
       return {
         [TAGGED_ERROR]: true,
         [ERROR_VARIANT]: id,
@@ -141,7 +143,7 @@ export function defineErrors<TSpec extends { [K in keyof TSpec]: Payload<unknown
         message,
         stack: captureStack(),
         ...(cause !== undefined ? { cause } : {}),
-        ...(attachData ? { data: rest } : {}),
+        data: rest,
       };
     };
     factory[type] = Object.assign(build, { type, [ERROR_VARIANT]: id });
@@ -351,7 +353,7 @@ function formatErrorValue(err: unknown): Record<string, unknown> {
     if (err.cause !== undefined && err.cause !== null) {
       formatted.cause = formatErrorValue(err.cause);
     }
-    if (err.data !== undefined) {
+    if (err.data !== undefined && typeof err.data === "object" && err.data !== null && Object.keys(err.data).length > 0) {
       formatted.data = err.data;
     }
     return formatted;
