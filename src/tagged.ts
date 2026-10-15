@@ -315,10 +315,58 @@ const NATIVE_ERROR_DETAIL_KEYS = [
   "dest",
 ] as const;
 
-function formatNativeError(err: Error): Record<string, unknown> {
+/** String, JSON for objects, `String` otherwise. JSON failures fall back to `String`. */
+function formatMessage(message: unknown): string {
+  if (typeof message === "string") {
+    return message;
+  }
+  if (typeof message === "object" && message !== null) {
+    try {
+      const json = JSON.stringify(message);
+      if (typeof json === "string") {
+        return json;
+      }
+    } catch {
+      // Circular or otherwise unserializable — fall through to String.
+    }
+  }
+  return String(message);
+}
+
+function isPlainObject(value: unknown): value is Record<string, unknown> {
+  if (typeof value !== "object" || value === null) {
+    return false;
+  }
+  const proto = Object.getPrototypeOf(value);
+  return proto === Object.prototype || proto === null;
+}
+
+/** Own `message` via `formatMessage`, otherwise JSON of the object with `cause` omitted. */
+function plainObjectMessage(value: Record<string, unknown>): string {
+  if (Object.hasOwn(value, "message") && value.message !== undefined) {
+    return formatMessage(value.message);
+  }
+  const rest: Record<string, unknown> = {};
+  for (const key of Object.keys(value)) {
+    if (key !== "cause") {
+      rest[key] = value[key];
+    }
+  }
+  try {
+    const json = JSON.stringify(rest);
+    if (typeof json === "string") {
+      return json;
+    }
+  } catch {
+    // Circular or otherwise unserializable — fall through to String.
+  }
+  return String(value);
+}
+
+function formatNativeError(err: Error, seen: WeakSet<object>): Record<string, unknown> {
   const formatted: Record<string, unknown> = {
     name: err.name,
-    message: err.message,
+    message: formatMessage(err.message),
   };
   const record = err as unknown as Record<string, unknown>;
   for (const key of NATIVE_ERROR_DETAIL_KEYS) {
@@ -327,12 +375,12 @@ function formatNativeError(err: Error): Record<string, unknown> {
     }
   }
   if (Array.isArray(record.errors)) {
-    formatted.errors = record.errors.map(formatErrorValue);
+    formatted.errors = record.errors.map((item) => formatErrorValue(item, seen));
   } else if (err instanceof AggregateError) {
-    formatted.errors = err.errors.map(formatErrorValue);
+    formatted.errors = err.errors.map((item) => formatErrorValue(item, seen));
   }
   if (err.cause !== undefined && err.cause !== null) {
-    formatted.cause = formatErrorValue(err.cause);
+    formatted.cause = formatErrorValue(err.cause, seen);
   }
   return formatted;
 }
@@ -347,11 +395,18 @@ function formatData(data: unknown): string | undefined {
   return `data: ${JSON.stringify(data)}`;
 }
 
-function formatErrorValue(err: unknown): Record<string, unknown> {
+function formatErrorValue(err: unknown, seen: WeakSet<object>): Record<string, unknown> {
+  if (typeof err === "object" && err !== null) {
+    if (seen.has(err)) {
+      return { message: "[Circular]" };
+    }
+    seen.add(err);
+  }
+
   if (isTaggedError(err)) {
-    const formatted: Record<string, unknown> = { type: errorType(err), message: err.message };
+    const formatted: Record<string, unknown> = { type: errorType(err), message: formatMessage(err.message) };
     if (err.cause !== undefined && err.cause !== null) {
-      formatted.cause = formatErrorValue(err.cause);
+      formatted.cause = formatErrorValue(err.cause, seen);
     }
     if (err.data !== undefined && typeof err.data === "object" && err.data !== null && Object.keys(err.data).length > 0) {
       formatted.data = err.data;
@@ -359,7 +414,14 @@ function formatErrorValue(err: unknown): Record<string, unknown> {
     return formatted;
   }
   if (err instanceof Error) {
-    return formatNativeError(err);
+    return formatNativeError(err, seen);
+  }
+  if (isPlainObject(err)) {
+    const formatted: Record<string, unknown> = { message: plainObjectMessage(err) };
+    if (err.cause !== undefined && err.cause !== null) {
+      formatted.cause = formatErrorValue(err.cause, seen);
+    }
+    return formatted;
   }
   return { message: String(err) };
 }
@@ -388,7 +450,7 @@ function attachFullInspect(value: Record<string, unknown>): Record<string, unkno
  * chain. A custom inspect expands the whole object.
  */
 export function formatError(err: unknown): Record<string, unknown> {
-  return attachFullInspect(formatErrorValue(err));
+  return attachFullInspect(formatErrorValue(err, new WeakSet()));
 }
 
 /**
@@ -396,18 +458,36 @@ export function formatError(err: unknown): Record<string, unknown> {
  * data, then stack, then the cause chain.
  */
 export function formatTaggedError(err: unknown): string {
+  return formatTaggedErrorValue(err, new WeakSet());
+}
+
+function formatTaggedErrorValue(err: unknown, seen: WeakSet<object>): string {
+  if (typeof err === "object" && err !== null) {
+    if (seen.has(err)) {
+      return "[Circular]";
+    }
+    seen.add(err);
+  }
+
   if (!isTaggedError(err)) {
     if (err instanceof Error) {
-      const parts = [err.message];
+      const parts = [formatMessage(err.message)];
       if (err.stack) {
         parts.push("", err.stack);
+      }
+      return parts.join("\n");
+    }
+    if (isPlainObject(err)) {
+      const parts = [plainObjectMessage(err)];
+      if (err.cause !== undefined && err.cause !== null) {
+        parts.push("", "Caused by:", formatTaggedErrorValue(err.cause, seen));
       }
       return parts.join("\n");
     }
     return String(err);
   }
 
-  const parts = [err.message, `type: ${errorType(err)}`];
+  const parts = [formatMessage(err.message), `type: ${errorType(err)}`];
   const dataLine = formatData(err.data);
   if (dataLine) {
     parts.push(dataLine);
@@ -416,7 +496,7 @@ export function formatTaggedError(err: unknown): string {
     parts.push("", err.stack);
   }
   if (err.cause !== undefined && err.cause !== null) {
-    parts.push("", "Caused by:", formatTaggedError(err.cause));
+    parts.push("", "Caused by:", formatTaggedErrorValue(err.cause, seen));
   }
   return parts.join("\n");
 }

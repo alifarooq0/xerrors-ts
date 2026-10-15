@@ -376,6 +376,75 @@ test("formatError expands AggregateError nested errors", () => {
   assert.match(text, /address: '127\.0\.0\.1'/);
 });
 
+test("formatError keeps a plain-object cause message and its nested Error", () => {
+  const nested = Object.assign(new Error("request failed"), { name: "UpstreamError" });
+  const cause = {
+    type: "upstream",
+    message: "Upstream failed with status 404",
+    status: 404,
+    body: '{"error":{"message":"request failed","code":404}}',
+    cause: nested,
+  };
+  const err = EntityErr.network("Upstream failed with status 404", { cause });
+
+  assert.deepEqual(formatError(err), {
+    type: "network",
+    message: "Upstream failed with status 404",
+    cause: {
+      message: "Upstream failed with status 404",
+      cause: { name: "UpstreamError", message: "request failed" },
+    },
+  });
+
+  const text = formatTaggedError(err);
+  assert.equal(text.includes("[object Object]"), false);
+  assert.match(text, /Caused by:\nUpstream failed with status 404/);
+  assert.match(text, /UpstreamError: request failed/);
+});
+
+test("formatError JSON-stringifies a plain-object cause whose message is an object", () => {
+  const message = { code: 404, reason: "missing" };
+  const cause = { message };
+  const err = EntityErr.network("failed", { cause });
+
+  assert.deepEqual(formatError(err).cause, {
+    message: JSON.stringify(message),
+  });
+  assert.match(formatTaggedError(err), new RegExp(JSON.stringify(message).replace(/[.*+?^${}()|[\]\\]/g, "\\$&")));
+});
+
+test("formatError JSON-stringifies a plain object without a message and omits cause from that JSON", () => {
+  const cause = {
+    status: 404,
+    body: "nope",
+    cause: new Error("request failed"),
+  };
+
+  assert.deepEqual(formatError(cause), {
+    message: JSON.stringify({ status: 404, body: "nope" }),
+    cause: { name: "Error", message: "request failed" },
+  });
+
+  const text = formatTaggedError(cause);
+  assert.equal(text.split("\n")[0], JSON.stringify({ status: 404, body: "nope" }));
+  assert.match(text, /Caused by:\nrequest failed/);
+  assert.equal(text.split("\n")[0]?.includes("request failed"), false);
+});
+
+test("formatError does not throw when a plain-object cause is circular", () => {
+  const cause: { message: string; cause?: unknown } = { message: "loop" };
+  cause.cause = cause;
+  const err = EntityErr.validation("bad input", { cause });
+
+  const formatted = formatError(err);
+  assert.equal((formatted.cause as { message: string }).message, "loop");
+  assert.doesNotThrow(() => JSON.stringify(formatted));
+
+  const text = formatTaggedError(err);
+  assert.match(text, /Caused by:\nloop/);
+  assert.equal(text.includes("[object Object]"), false);
+});
+
 function closedLocalPort(): Promise<number> {
   return new Promise((resolve, reject) => {
     const server = net.createServer();
