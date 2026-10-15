@@ -1,6 +1,6 @@
 {
   "name": "ts-xerrorof",
-  "version": "0.2.0",
+  "version": "0.2.1",
   "description": "Tagged domain errors for TypeScript, with neverthrow Result helpers.",
   "license": "MIT",
   "author": "Ali Farooq",
